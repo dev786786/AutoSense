@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto-Sense | Mobile AQI Network</title>
+      <link rel="shortcut icon" href="apple-touch-icon.png" type="image/x-icon">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
+<script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        #map { height: 550px; border-radius: 20px; z-index: 1; }
+        .glass { background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(12px); }
+        .pulse-dot { animation: pulse 2s infinite; }
+        @keyframes pulse {
+            0% { transform: scale(0.95); opacity: 0.7; }
+            70% { transform: scale(1.1); opacity: 1; }
+            100% { transform: scale(0.95); opacity: 0.7; }
+        }
+        @keyframes fadeIn {
+  from { opacity:0; transform: scale(0.9); }
+  to { opacity:1; transform: scale(1); }
+}
+.animate-fadeIn {
+  animation: fadeIn 0.3s ease-out;
+}
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen">
+
+    <div class="container mx-auto p-4 lg:p-8">
+        <header class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4">
+            <div>
+                <div class="flex items-center gap-2">
+                    <div id="connection-indicator" class="w-3 h-3 bg-red-500 rounded-full pulse-dot"></div>
+                    <h1 class="text-4xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-blue-500">
+                        AUTO-SENSE
+                    </h1>
+                </div>
+                <p class="text-slate-400 text-sm mt-1">Real-time Pollution Monitoring via Autorickshaw Network</p>
+            </div>
+            
+            <div class="w-full md:w-72">
+                <label class="block text-xs font-bold text-slate-500 mb-1 uppercase tracking-widest text-right">Quick Navigation</label>
+                <select id="area-picker" onchange="updateFocus(this.value)" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-white focus:ring-2 focus:ring-blue-500 outline-none shadow-xl transition-all">
+                    <option value="">-- Select a Noida Sector --</option>
+                </select>
+            </div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <div class="lg:col-span-3 relative group">
+                <div id="map" class="border border-slate-800 shadow-2xl transition-all group-hover:border-slate-700"></div>
+                
+                <div class="absolute bottom-6 left-6 z-[1000] glass p-4 rounded-xl border border-slate-700/50 text-xs flex gap-6 shadow-2xl">
+                    <span class="flex items-center gap-2"><i class="w-3 h-3 rounded-full bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.6)]"></i> Good (0-50)</span>
+                    <span class="flex items-center gap-2"><i class="w-3 h-3 rounded-full bg-yellow-500 shadow-[0_0_10px_rgba(250,204,21,0.6)]"></i> Moderate (51-200)</span>
+                    <span class="flex items-center gap-2"><i class="w-3 h-3 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.6)]"></i> Dangerous (201+)</span>
+                </div>
+            </div>
+
+            <div class="space-y-4">
+                <div id="stat-card" class="bg-slate-900/50 border border-slate-800 p-6 rounded-3xl transition-all duration-700 relative overflow-hidden">
+                    <div id="stat-glow" class="absolute -right-8 -top-8 w-24 h-24 bg-blue-500/10 blur-3xl"></div>
+                    
+                    <h2 id="display-name" class="text-xl font-bold mb-1 text-slate-100">City Overview</h2>
+                    <p class="text-xs text-slate-500 mb-6 flex items-center gap-1">
+                        <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                        Last updated: <span id="last-update-time">Waiting...</span>
+                    </p>
+                    
+                    <div class="flex items-baseline gap-3">
+                        <span id="display-aqi" class="text-7xl font-black tracking-tighter transition-all duration-500 text-slate-700">--</span>
+                        <span class="text-slate-500 font-bold uppercase tracking-widest text-xs">AQI Units</span>
+                    </div>
+                    
+                    <div id="safety-badge" class="mt-6 inline-block px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest bg-slate-800 text-slate-400">
+                        System Ready
+                    </div>
+                </div>
+
+                <div class="bg-slate-900/50 border border-slate-800 p-5 rounded-3xl">
+                    <h3 class="text-sm font-black text-blue-400 mb-4 uppercase tracking-tighter">Live Advisor</h3>
+                    <div class="space-y-4">
+                        <div class="flex justify-between items-center border-b border-slate-800/50 pb-2">
+                            <span class="text-slate-400 text-sm">Exposure Risk</span>
+                            <span id="risk-factor" class="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-800">LOW</span>
+                        </div>
+                        <p id="health-tip" class="text-xs text-slate-400 italic">"Select a rickshaw node on the map to view area-specific safety recommendations."</p>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900/50 border border-slate-800 p-5 rounded-3xl space-y-3">
+    <h3 class="text-sm font-black text-blue-400 uppercase tracking-tighter">
+        Safest Route Planner
+    </h3>
+
+    <select id="start-sector" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-white">
+        <option value="">Select Start Location</option>
+    </select>
+
+    <select id="end-sector" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-4 py-2 text-white">
+        <option value="">Select Destination</option>
+    </select>
+
+    <button onclick="calculateSafestRoute()" 
+        class="w-full bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-500 hover:to-blue-600 text-white font-black py-3 rounded-xl uppercase tracking-widest text-xs">
+        Calculate Safest Route
+    </button>
+</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let routeLayer = null;
+        const noidaSectors = [
+            { id: 1, name: "Sector 62 (Industrial)", lat: 28.6289, lng: 77.3769, aqi: 0 },
+            { id: 2, name: "Sector 18 (Commercial)", lat: 28.5708, lng: 77.3261, aqi: 0 },
+            { id: 3, name: "Sector 50 (Residential)", lat: 28.5677, lng: 77.3661, aqi: 0 },
+            { id: 4, name: "Sector 137 (Eco City)", lat: 28.5028, lng: 77.4082, aqi: 0 },
+            { id: 5, name: "Pari Chowk", lat: 28.4671, lng: 77.5134, aqi: 0 },
+            { id: 6, name: "Botanical Garden", lat: 28.5645, lng: 77.3340, aqi: 0 },
+            { id: 7, name: "Sector 15 Metro", lat: 28.5833, lng: 77.3111, aqi: 0 },
+            { id: 8, name: "Sector 128 (Wish Town)", lat: 28.5134, lng: 77.3611, aqi: 0 },
+            { id: 9, name: "Sector 93A", lat: 28.5280, lng: 77.3880, aqi: 0 },
+            { id: 10, name: "Sector 10 (Ind. Area)", lat: 28.5912, lng: 77.3190, aqi: 0 },
+            { id: 11, name: "Sector 21 Stadium", lat: 28.5950, lng: 77.3390, aqi: 0 },
+            { id: 12, name: "Sector 37 (City Center)", lat: 28.5650, lng: 77.3490, aqi: 0 },
+            { id: 13, name: "Sector 76", lat: 28.5630, lng: 77.3850, aqi: 0 },
+            { id: 14, name: "Sector 125 (Amity)", lat: 28.5450, lng: 77.3330, aqi: 0 },
+            { id: 15, name: "Sector 44", lat: 28.5520, lng: 77.3420, aqi: 0 },
+            { id: 16, name: "Sector 1 (Film City)", lat: 28.5780, lng: 77.3150, aqi: 0 },
+            { id: 17, name: "Sector 110 (Market)", lat: 28.5350, lng: 77.3950, aqi: 0 },
+            { id: 18, name: "Sector 52", lat: 28.5820, lng: 77.3550, aqi: 0 },
+            { id: 19, name: "Sector 12 (Residential)", lat: 28.5920, lng: 77.3250, aqi: 0 },
+            { id: 20, name: "Sector 104 (Hub)", lat: 28.5420, lng: 77.3650, aqi: 0 }
+        ];
+        function showExposureModal(score){
+
+  const modal = document.getElementById("exposureModal");
+  const exposureEl = document.getElementById("modal-exposure");
+  const icon = document.getElementById("modal-icon");
+
+  exposureEl.innerText = score;
+
+  // Change color + emoji based on score
+  if(score > 150){
+      exposureEl.className = "text-4xl font-black mb-6 text-red-500";
+      icon.innerText = "🚨";
+  } 
+  else if(score > 80){
+      exposureEl.className = "text-4xl font-black mb-6 text-yellow-400";
+      icon.innerText = "⚠️";
+  }
+  else {
+      exposureEl.className = "text-4xl font-black mb-6 text-green-400";
+      icon.innerText = "🌿";
+  }
+
+  modal.classList.remove("hidden");
+}
+
+function closeExposureModal(){
+  document.getElementById("exposureModal").classList.add("hidden");
+}
+        const startPicker = document.getElementById("start-sector");
+const endPicker = document.getElementById("end-sector");
+
+noidaSectors.forEach(area => {
+    let opt1 = document.createElement('option');
+    opt1.value = area.id;
+    opt1.innerText = area.name;
+    startPicker.appendChild(opt1);
+
+    let opt2 = document.createElement('option');
+    opt2.value = area.id;
+    opt2.innerText = area.name;
+    endPicker.appendChild(opt2);
+});
+async function calculateSafestRoute() {
+
+    const startId = document.getElementById("start-sector").value;
+    const endId = document.getElementById("end-sector").value;
+
+    if(!startId || !endId) {
+        alert("Please select both start and destination.");
+        return;
+    }
+
+    try {
+        const response = await fetch("http://127.0.0.1:5001/api/safest-route", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                start: startId,
+                end: endId
+            })
+        });
+
+        const data = await response.json();
+
+        if(routeLayer) {
+            map.removeLayer(routeLayer);
+        }
+
+        routeLayer = L.polyline(data.route_coords, {
+            color: "#3b82f6",
+            weight: 5
+        }).addTo(map);
+
+        map.fitBounds(routeLayer.getBounds());
+
+        showExposureModal(data.total_exposure);
+
+    } catch(error) {
+        console.error(error);
+        alert("Route calculation failed.");
+    }
+}
+
+
+        const map = L.map('map').setView([28.5355, 77.3910], 12);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; CartoDB'
+        }).addTo(map);
+
+        const markers = {};
+        let currentSelectedId = null;
+
+        function getColor(aqi) {
+            if(aqi > 200) return "#ef4444"; 
+            if(aqi > 100) return "#facc15"; 
+            return "#22c55e"; 
+        }
+
+        const picker = document.getElementById('area-picker');
+        noidaSectors.forEach(area => {
+            let opt = document.createElement('option');
+            opt.value = area.id;
+            opt.innerHTML = area.name;
+            picker.appendChild(opt);
+
+            const m = L.circleMarker([area.lat, area.lng], {
+                radius: 12,
+                fillColor: "#334155", // Default gray until synced
+                color: "#fff",
+                weight: 2,
+                fillOpacity: 0.8
+            }).addTo(map);
+            
+            m.bindPopup(`<b>${area.name}</b><br>AQI: Syncing...`);
+            m.on('click', () => updateFocus(area.id));
+            markers[area.id] = m;
+        });
+
+        function updateFocus(id) {
+            if(!id) return;
+            currentSelectedId = id;
+            picker.value = id;
+            const data = noidaSectors.find(s => s.id == id);
+            map.flyTo([data.lat, data.lng], 15);
+            markers[id].openPopup();
+            renderUI(data);
+        }
+
+        function renderUI(data) {
+            const aqiEl = document.getElementById('display-aqi');
+            const color = getColor(data.aqi);
+            document.getElementById('display-name').innerText = data.name;
+            aqiEl.innerText = data.aqi || "--";
+            aqiEl.style.color = color;
+            document.getElementById('stat-card').style.borderColor = color + '44';
+            
+            const badge = document.getElementById('safety-badge');
+            const risk = document.getElementById('risk-factor');
+            const tip = document.getElementById('health-tip');
+
+            if(data.aqi > 200) {
+                badge.innerText = "🚨 DANGEROUS";
+                badge.className = "mt-6 inline-block px-4 py-1.5 rounded-full text-[10px] font-black bg-red-500/20 text-red-500";
+                risk.innerText = "CRITICAL";
+                risk.className = "font-mono text-xs font-bold px-2 py-0.5 rounded bg-red-900/30 text-red-500";
+                tip.innerText = "High-efficiency masks required. Vulnerable groups should avoid outdoor travel.";
+            } else if (data.aqi > 100) {
+                badge.innerText = "⚠️ MODERATE";
+                badge.className = "mt-6 inline-block px-4 py-1.5 rounded-full text-[10px] font-black bg-yellow-500/20 text-yellow-500";
+                risk.innerText = "MEDIUM";
+                risk.className = "font-mono text-xs font-bold px-2 py-0.5 rounded bg-yellow-900/30 text-yellow-500";
+                tip.innerText = "Sensitive individuals should limit prolonged outdoor exertion.";
+            } else {
+                badge.innerText = "✅ SAFE ZONE";
+                badge.className = "mt-6 inline-block px-4 py-1.5 rounded-full text-[10px] font-black bg-green-500/20 text-green-500";
+                risk.innerText = "LOW";
+                risk.className = "font-mono text-xs font-bold px-2 py-0.5 rounded bg-green-900/30 text-green-500";
+                tip.innerText = "Ideal air quality for outdoor activities.";
+            }
+        }
+
+        async function fetchLiveSensorData() {
+            try {
+                // Poll from server every 5 seconds
+                const response = await fetch('http://127.0.0.1:5001/api/aqi');
+                const allNodes = await response.json();
+                
+                document.getElementById('connection-indicator').classList.replace('bg-red-500', 'bg-green-500');
+
+                for (const id in allNodes) {
+                    const liveNode = allNodes[id];
+                    const localIndex = noidaSectors.findIndex(s => s.id == id);
+                    if(localIndex !== -1) {
+                        noidaSectors[localIndex].aqi = liveNode.aqi;
+
+                        if (markers[id]) {
+                            markers[id].setStyle({ fillColor: getColor(liveNode.aqi) });
+                            markers[id].setPopupContent(`<b>${liveNode.name}</b><br>Live AQI: ${liveNode.aqi}`);
+                        }
+                    }
+
+                    if (currentSelectedId == id) {
+                        renderUI(noidaSectors[localIndex]);
+                        document.getElementById('last-update-time').innerText = liveNode.last_updated;
+                    }
+                }
+            } catch (error) {
+                console.error("Connection Failed:", error);
+                document.getElementById('connection-indicator').classList.replace('bg-green-500', 'bg-red-500');
+            }
+        }
+
+        // --- UPDATED TO 5 SECONDS ---
+        setInterval(fetchLiveSensorData, 5000); //
+        fetchLiveSensorData();
+    </script>
+    <!-- Fancy Exposure Modal -->
+<div id="exposureModal" 
+class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center hidden z-[9999]">
+
+  <div class="bg-slate-900 border border-slate-700 rounded-3xl p-8 w-[380px] text-center shadow-2xl animate-fadeIn">
+
+    <div id="modal-icon" class="text-5xl mb-4">🌿</div>
+
+    <h2 class="text-xl font-bold mb-2">Safest Route Calculated</h2>
+
+    <p class="text-slate-400 text-sm mb-6">
+      Estimated Pollution Exposure
+    </p>
+
+    <div id="modal-exposure"
+      class="text-4xl font-black mb-6 text-green-400">
+      0
+    </div>
+
+    <button onclick="closeExposureModal()"
+      class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded-xl font-bold transition-all">
+      Close
+    </button>
+
+  </div>
+</div>
+</body>
+</html>
