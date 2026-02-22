@@ -222,12 +222,61 @@ async function calculateSafestRoute() {
 }
 
 
-        const map = L.map('map').setView([28.5355, 77.3910], 12);
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-            attribution: '&copy; CartoDB'
-        }).addTo(map);
+       // 1. Define Base Layers
+const darkMap = L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '&copy; CartoDB'
+});
 
-        const markers = {};
+const satelliteMap = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles &copy; Esri'
+});
+
+const streetMap = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; OpenStreetMap'
+});
+
+// 2. Initialize Map with a default base layer
+const map = L.map('map', {
+    center: [28.5355, 77.3910],
+    zoom: 12,
+    layers: [darkMap] // Default
+});
+
+// 3. Create a Layer Group for your markers
+const sensorMarkers = L.layerGroup().addTo(map);
+
+// 4. Update your marker creation logic
+const markers = {};
+noidaSectors.forEach(area => {
+    // ... (keep your existing option creation logic)
+
+    const m = L.circleMarker([area.lat, area.lng], {
+        radius: 12,
+        fillColor: "#334155",
+        color: "#fff",
+        weight: 2,
+        fillOpacity: 0.8
+    });
+    
+    m.bindPopup(`<b>${area.name}</b><br>AQI: Syncing...`);
+    m.on('click', () => updateFocus(area.id));
+    
+    markers[area.id] = m;
+    m.addTo(sensorMarkers); // Add to the group instead of directly to map
+});
+
+// 5. Add the Layer Control Widget
+const baseMaps = {
+    "Dark Mode": darkMap,
+    "Satellite": satelliteMap,
+    "Street View": streetMap
+};
+
+const overlayMaps = {
+    "AQI Sensors": sensorMarkers
+};
+
+L.control.layers(baseMaps, overlayMaps, { collapsed: false }).addTo(map);
         let currentSelectedId = null;
 
         function getColor(aqi) {
