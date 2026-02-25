@@ -5,12 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Auto-Sense | Mobile AQI Network</title>
       <link rel="shortcut icon" href="apple-touch-icon.png" type="image/x-icon">
-    <link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.css" />
-<script src="https://unpkg.com/leaflet-routing-machine@latest/dist/leaflet-routing-machine.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.css" />
+<script src="https://unpkg.com/leaflet-routing-machine@3.2.12/dist/leaflet-routing-machine.js"></script>
     <style>
+        /* Hide the routing instructions panel to keep the dashboard clean */
+.leaflet-routing-container {
+    display: none;
+}
         #map { height: 550px; border-radius: 20px; z-index: 1; }
         .glass { background: rgba(15, 23, 42, 0.8); backdrop-filter: blur(12px); }
         .pulse-dot { animation: pulse 2s infinite; }
@@ -180,44 +185,55 @@ noidaSectors.forEach(area => {
     opt2.innerText = area.name;
     endPicker.appendChild(opt2);
 });
-async function calculateSafestRoute() {
+// Initialize the routing control variable at the top of your script
 
+
+// Add this at the VERY TOP of your <script> tag, outside any function
+let routingControl = null;
+
+async function calculateSafestRoute() {
     const startId = document.getElementById("start-sector").value;
     const endId = document.getElementById("end-sector").value;
 
-    if(!startId || !endId) {
+    if (!startId || !endId) {
         alert("Please select both start and destination.");
         return;
     }
 
+    const startData = noidaSectors.find(s => s.id == startId);
+    const endData = noidaSectors.find(s => s.id == endId);
+
+    // Clear previous routes to prevent the map from getting cluttered
+    if (routingControl) {
+        map.removeControl(routingControl);
+    }
+
+    // Initialize the road-based routing
+    routingControl = L.Routing.control({
+        waypoints: [
+            L.latLng(startData.lat, startData.lng),
+            L.latLng(endData.lat, endData.lng)
+        ],
+        lineOptions: {
+            styles: [{ color: '#3b82f6', weight: 6, opacity: 0.9 }]
+        },
+        addWaypoints: false,
+        draggableWaypoints: false,
+        createMarker: function() { return null; }, // Use your existing sensor markers
+        show: false // Hides the default white instruction box
+    }).addTo(map);
+
+    // Keep your existing backend fetch for the AQI exposure data
     try {
         const response = await fetch("http://127.0.0.1:5001/api/safest-route", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                start: startId,
-                end: endId
-            })
+            body: JSON.stringify({ start: startId, end: endId })
         });
-
         const data = await response.json();
-
-        if(routeLayer) {
-            map.removeLayer(routeLayer);
-        }
-
-        routeLayer = L.polyline(data.route_coords, {
-            color: "#3b82f6",
-            weight: 5
-        }).addTo(map);
-
-        map.fitBounds(routeLayer.getBounds());
-
         showExposureModal(data.total_exposure);
-
-    } catch(error) {
-        console.error(error);
-        alert("Route calculation failed.");
+    } catch(e) {
+        console.log("Backend offline, but route displayed.");
     }
 }
 
